@@ -82,7 +82,7 @@ public:
     void stopServer(void);
 	void sendCmd(u8 cmd, u8 *data, u8 size);
     void sendResponse(bool ok, u8 cmd, u8 *data, u8 size);
-    void setCallback(u32 (*callback)(u8 cmd, u8 *data, u8 size));
+    void setCallback(u32 (*callback)(bool ok, u8 cmd, u8 *data, u8 size));
 
 private:
     typedef enum
@@ -98,7 +98,7 @@ private:
 
     //
 	void handleRX(u8 *data, int size);
-    void evalCommand(u8 cmd, u8 *data, u8 size);
+    void evalCommand(bool ok, u8 cmd, u8 *data, u8 size);
 	void sendMSP(u8 sort, u8 bCmd, u8 *data, int len);
 	static void* RXThread(void *arg);
 
@@ -114,7 +114,8 @@ private:
     u8   mDataSize;
     u8   mCheckSum;
     u8   mCmd;
-    u32  (*mCallback)(u8 cmd, u8 *data, u8 size);
+    bool mRespOK;
+    u32  (*mCallback)(bool ok, u8 cmd, u8 *data, u8 size);
 };
 
 #endif

@@ -24,9 +24,15 @@ class WiFiProtocol
 {
 
 public:
+    enum {
+        WIFI_STATUS_CONNECT  = 0,
+        WIFI_CMD_START_VIDEO = 10,
+        WIFI_CMD_STOP_VIDEO  = 11,
+    };
     WiFiProtocol(int port);
     ~WiFiProtocol();
 
+    int  startServer(void);
     void stopServer(void);
 	void sendCmd(u8 cmd, u8 *data, u8 size);
     void sendResponse(bool ok, u8 cmd, u8 *data, u8 size);
@@ -44,7 +50,6 @@ private:
     } STATE_T;
 
     //
-    int  startServer(int port);
 	void handleRX(u8 *data, int size);
     void evalCommand(u8 cmd, u8 *data, u8 size);
 	void sendMSP(u8 sort, u8 bCmd, u8 *data, int len);
@@ -55,6 +60,7 @@ private:
     bool mBoolFinish;
     int  mSockServer;
     int  mSockClient;
+    int  mSockPort;
 
     u8   mRxPacket[MAX_PACKET_SIZE];
 

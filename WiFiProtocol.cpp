@@ -61,12 +61,13 @@ void *WiFiProtocol::RXThread(void *arg)
     while(!parent->mBoolFinish) {
         printf( "waiting for new client...\n" );
         parent->mSockClient = accept(parent->mSockServer, (struct sockaddr*)&cli_addr, (socklen_t*)&clilen);
-        if (parent->mSockClient < 0 )
+        if (parent->mSockClient < 0 ) {
             printf("ERROR on accept : %d\n", parent->mSockClient);
-
-        state = 1;
-    	if (parent->mCallback)
-    		(*parent->mCallback)(0, (u8*)&state, sizeof(state));
+        } else {
+            state = 1;
+        	if (parent->mCallback)
+        		(*parent->mCallback)(WIFI_STATUS_CONNECT, (u8*)&state, sizeof(state));
+        }
 
         printf("A connection has been accepted from %s port:%d\n",
                inet_ntoa((struct in_addr)cli_addr.sin_addr),
@@ -91,7 +92,7 @@ void *WiFiProtocol::RXThread(void *arg)
     	}
         state = 0;
     	if (parent->mCallback)
-    		(*parent->mCallback)(0, (u8*)&state, sizeof(state));
+    		(*parent->mCallback)(WIFI_STATUS_CONNECT, (u8*)&state, sizeof(state));
     }
     close(parent->mSockClient);
     parent->mSockClient = -1;
@@ -103,8 +104,7 @@ WiFiProtocol::WiFiProtocol(int port)
 {
   	mBoolFinish = FALSE;
 	mState = STATE_IDLE;
-    startServer(port);
-	pthread_create(&mThreadRx, NULL, &RXThread, this);
+    mSockPort = port;
 }
 
 WiFiProtocol::~WiFiProtocol()
@@ -118,7 +118,7 @@ WiFiProtocol::~WiFiProtocol()
         close(mSockServer);
 }
 
-int WiFiProtocol::startServer(int port)
+int WiFiProtocol::startServer(void)
 {
     int    err = 0;
     struct sockaddr_in serv_addr;
@@ -132,7 +132,7 @@ int WiFiProtocol::startServer(int port)
     bzero((char *) &serv_addr, sizeof(serv_addr));
     serv_addr.sin_family      = AF_INET;
     serv_addr.sin_addr.s_addr = INADDR_ANY;
-    serv_addr.sin_port        = htons(port);
+    serv_addr.sin_port        = htons(mSockPort);
     err = bind(mSockServer, (struct sockaddr *) &serv_addr, sizeof(serv_addr));
     if (err < 0) {
         printf("Binding Error !!\n");
@@ -144,6 +144,7 @@ int WiFiProtocol::startServer(int port)
         printf("Listening Error !!\n");
         return err;
     }
+	pthread_create(&mThreadRx, NULL, &RXThread, this);
     return 0;
 }
 

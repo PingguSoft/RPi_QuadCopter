@@ -93,7 +93,7 @@ void SerialProtocol::stopServer(void)
     mBoolFinish = true;
 }
 
-void SerialProtocol::setCallback(u32 (*callback)(u8 cmd, u8 *data, u8 size))
+void SerialProtocol::setCallback(u32 (*callback)(bool ok, u8 cmd, u8 *data, u8 size))
 {
     mCallback = callback;
 }
@@ -152,10 +152,10 @@ void SerialProtocol::sendCmd(u8 cmd, u8 *data, u8 size)
 	sendMSP(SORT_CMD, cmd, data, size);
 }
 
-void SerialProtocol::evalCommand(u8 cmd, u8 *data, u8 size)
+void SerialProtocol::evalCommand(bool ok, u8 cmd, u8 *data, u8 size)
 {
 	if (mCallback)
-		(*mCallback)(cmd, data, size);
+		(*mCallback)(ok, cmd, data, size);
 }
 
 void SerialProtocol::handleRX(u8 *data, int size)
@@ -175,10 +175,14 @@ void SerialProtocol::handleRX(u8 *data, int size)
     			break;
 
     		case STATE_HEADER_M:
-                if (ch == '>')
+                if (ch == '>') {
                     mState = STATE_HEADER_ARROW;
-                else if (ch == '!')
+                    mRespOK = TRUE;
+                }
+                else if (ch == '!') {
                     mState = STATE_HEADER_ERR;
+                    mRespOK = FALSE;
+                }
                 else
                     mState = STATE_IDLE;
     			break;
@@ -207,7 +211,7 @@ void SerialProtocol::handleRX(u8 *data, int size)
     				mRxPacket[mOffset++] = ch;
     			} else {
     				if (mCheckSum == ch)
-    					evalCommand(mCmd, mRxPacket, mDataSize);
+    					evalCommand(mRespOK, mCmd, mRxPacket, mDataSize);
     				mState = STATE_IDLE;
     			}
     			break;

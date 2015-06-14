@@ -95,32 +95,165 @@ void initPWM(void)
     init_channel(0, PERIOD_CH0);
 }
 
-u32 cbSerialRX(u8 cmd, u8 * data, u8 size)
+u32 cbSerialRX(bool ok, u8 cmd, u8 * data, u8 size)
 {
-    printf("SerialRX packet : %d (%d)\n", cmd, size);
+    //printf("SerialRX packet : %d (%d)\n", cmd, size);
     if (mWiFi)
-        mWiFi->sendResponse(TRUE, cmd, data, size);
+        mWiFi->sendResponse(ok, cmd, data, size);
 }
+
+static char *szH264[] = {
+    (char*)"baseline",
+    (char*)"high",
+    (char*)"main"
+};
+
+static char *szEXP[] = {
+    (char*)"auto",
+    (char*)"antishake",
+    (char*)"backlight",
+    (char*)"beach",
+    (char*)"fireworks",
+    (char*)"fixedfps",
+    (char*)"night",
+    (char*)"nightpreview",
+    (char*)"snow",
+    (char*)"sports",
+    (char*)"spotlight",
+    (char*)"verylong"
+};
+
+static char *szAWB[] = {
+    (char*)"auto",
+    (char*)"cloudy",
+    (char*)"flash",
+    (char*)"fluorescent",
+    (char*)"horizon",
+    (char*)"incandescent",
+    (char*)"off",
+    (char*)"shade",
+    (char*)"sun",
+    (char*)"tungsten",
+};
+
+static char *szFX[] = {
+    (char*)"none",
+    (char*)"blur",
+    (char*)"cartoon",
+    (char*)"colourbalance",
+    (char*)"colourpoint",
+    (char*)"colourswap",
+    (char*)"denoise",
+    (char*)"emboss",
+    (char*)"film",
+    (char*)"gpen",
+    (char*)"hatch",
+    (char*)"negative",
+    (char*)"oilpaint",
+    (char*)"pastel",
+    (char*)"posterise",
+    (char*)"saturation",
+    (char*)"sketch",
+    (char*)"solarise",
+    (char*)"washedout",
+    (char*)"watercolour"
+};
+
+static char *szCmdsKill[] = {
+    (char*)"pkill -f h264_v4l2_rtspserver",
+//    (char*)"fuser -k -n tcp 8554",
+    (char*)"pkill uv4l"
+};
+
+static char *szUV4L =
+    (char*)"uv4l --driver raspicam --auto-video_nr --sched-rr --encoding=h264 --nopreview "
+    "--vflip --hflip --profile=%s --width=%d --height=%d --framerate=%d --bitrate=%d --awb=%s --exposure=%s "
+    "--imgfx=%s";
+
+static char *szRTSP =
+    (char*)"su - pi -c '/home/pi/sw/QuadCopter/h264_v4l2_rtspserver /dev/video0 -W %d -H %d -F %d &'";
+
+
+void killVideo(void)
+{
+#if 1
+    for (int i = 0; i < sizeof(szCmdsKill) / sizeof(char*); i++) {
+        printf("CMD:%s\n", szCmdsKill[i]);
+        system(szCmdsKill[i]);
+        usleep(1000000);
+    }
+#endif
+}
+
+void startVideo(int pro, int width, int height, int bitrate, int fps, int awb, int exp, int fx)
+{
+    int  ret;
+    char szBuf[256];
+
+    sprintf(szBuf, szUV4L, szH264[pro], width, height, fps, bitrate, szAWB[awb], szEXP[exp], szFX[fx]);
+    ret = system(szBuf);
+    printf("CMD:%s\n", szBuf);
+
+    sprintf(szBuf, szRTSP, width, height, fps);
+    ret = system(szBuf);
+    printf("CMD:%s\n", szBuf);
+}
+
+typedef struct __attribute__ ((__packed__)) {
+    u16 width;
+    u16 height;
+    u32 bitrate;
+    u8  prof;
+    u8  fps;
+    u8  awb;
+    u8  exp;
+    u8  fx;
+} ENC_T;
 
 u32 cbWiFiRX(u8 cmd, u8 *data, u8 size)
 {
-    printf("WiFiRX packet : %d (%d)\n", cmd, size);
+    int state;
+    int ret;
+    u16 kk;
 
-    if (cmd == 0) {
-        int state = *((int*)data);
-        if (state == 1) {
-            mR = 255;
-            mG = 255;
-            mB = 0;
-        }
-        else {
-            mR = 0;
-            mG = 0;
-            mB = 255;
-        }
-    } else {
-        if (mMSP)
-            mMSP->sendCmd(cmd, data, size);
+
+    //printf("WiFiRX packet : %d (%d)\n", cmd, size);
+
+    switch (cmd) {
+        case WiFiProtocol::WIFI_STATUS_CONNECT:
+            state = *((int*)data);
+            if (state == 1) {
+                mR = 255;
+                mG = 255;
+                mB = 0;
+            }
+            else {
+                mR = 0;
+                mG = 0;
+                mB = 255;
+            }
+            break;
+
+        case WiFiProtocol::WIFI_CMD_START_VIDEO: {
+            ENC_T *pEnc = (ENC_T *)data;
+
+            startVideo(pEnc->prof, pEnc->width, pEnc->height, pEnc->bitrate, pEnc->fps, pEnc->awb, pEnc->exp, pEnc->fx);
+            if (mWiFi)
+                mWiFi->sendResponse(TRUE, cmd, NULL, 0);
+            }
+            break;
+
+        case WiFiProtocol::WIFI_CMD_STOP_VIDEO: {
+            killVideo();
+            if (mWiFi)
+                mWiFi->sendResponse(TRUE, cmd, NULL, 0);
+            }
+            break;
+
+        default:
+            if (mMSP)
+                mMSP->sendCmd(cmd, data, size);
+            break;
     }
 }
 
@@ -132,15 +265,19 @@ int main(int argc, char* argv[]) {
         return -1;
     }
 
+//    startVideo(1, 1920, 1080, 8000000, 25, 0, 0, 0);
+
     initPWM();
 
     mMSP = new SerialProtocol(115200);
     mMSP->setCallback(cbSerialRX);
-    mWiFi = new WiFiProtocol(7777);
-    mWiFi->setCallback(cbWiFiRX);
+    mWiFi = new WiFiProtocol(7778);
+    if (mWiFi->startServer() < 0) {
+        printf("SERVER FAILS!!!\n");
+        return -1;
+    }
 
-//	mMSP.sendCmd(MSP_IDENT, NULL, 0);
-//	mMSP.sendCmd(MSP_STATUS, NULL, 0);
+    mWiFi->setCallback(cbWiFiRX);
 
 	while(1) {
         setRGB(mR, mG, mB);
