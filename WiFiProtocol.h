@@ -34,7 +34,7 @@ public:
 
     int  startServer(void);
     void stopServer(void);
-	void sendCmd(u8 cmd, u8 *data, u8 size);
+    void sendCmd(u8 cmd, u8 *data, u8 size);
     void sendResponse(bool ok, u8 cmd, u8 *data, u8 size);
     void setCallback(u32 (*callback)(u8 cmd, u8 *data, u8 size));
 
@@ -50,13 +50,13 @@ private:
     } STATE_T;
 
     //
-	void handleRX(u8 *data, int size);
+    void handleRX(u8 *data, int size);
     void evalCommand(u8 cmd, u8 *data, u8 size);
-	void sendMSP(u8 sort, u8 bCmd, u8 *data, int len);
-	static void* RXThread(void *arg);
+    void sendMSP(u8 sort, u8 bCmd, u8 *data, int len);
+    static void* RXThread(void *arg);
 
     // variables
-	pthread_t mThreadRx;
+    pthread_t mThreadRx;
     bool mBoolFinish;
     int  mSockServer;
     int  mSockClient;

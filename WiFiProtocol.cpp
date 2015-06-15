@@ -29,7 +29,7 @@
 #include "WiFiProtocol.h"
 
 #define MAX_BUF_SIZE  (MAX_PACKET_SIZE + 10)
-#define SORT_CMD	  0
+#define SORT_CMD      0
 #define SORT_RESP_OK  1
 #define SORT_RESP_NO  2
 
@@ -52,11 +52,11 @@ void *WiFiProtocol::RXThread(void *arg)
     int    count;
     int    clilen;
     int    state;
-	fd_set read_fds;
+    fd_set read_fds;
     struct sockaddr_in cli_addr;
-	WiFiProtocol *parent = (WiFiProtocol*)arg;
+    WiFiProtocol *parent = (WiFiProtocol*)arg;
 
-	FD_ZERO(&read_fds);
+    FD_ZERO(&read_fds);
 
     while(!parent->mBoolFinish) {
         printf( "waiting for new client...\n" );
@@ -65,34 +65,34 @@ void *WiFiProtocol::RXThread(void *arg)
             printf("ERROR on accept : %d\n", parent->mSockClient);
         } else {
             state = 1;
-        	if (parent->mCallback)
-        		(*parent->mCallback)(WIFI_STATUS_CONNECT, (u8*)&state, sizeof(state));
+            if (parent->mCallback)
+                (*parent->mCallback)(WIFI_STATUS_CONNECT, (u8*)&state, sizeof(state));
         }
 
         printf("A connection has been accepted from %s port:%d\n",
                inet_ntoa((struct in_addr)cli_addr.sin_addr),
                ntohs(cli_addr.sin_port));
 
-    	while (!parent->mBoolFinish) {
-    		FD_SET(parent->mSockClient, &read_fds);
-    	    state = select(parent->mSockClient + 1, &read_fds, NULL, NULL, NULL);
+        while (!parent->mBoolFinish) {
+            FD_SET(parent->mSockClient, &read_fds);
+            state = select(parent->mSockClient + 1, &read_fds, NULL, NULL, NULL);
 
-    		if (FD_ISSET(parent->mSockClient, &read_fds)) {
+            if (FD_ISSET(parent->mSockClient, &read_fds)) {
                 state = ioctl(parent->mSockClient, FIONREAD, &count);
                 if (count > 0) {
                     count = (count < sizeof(buf)) ? count : sizeof(buf);
                     //printf("socket read : %d\n", count);
-        			count = read(parent->mSockClient, buf, count);
+                    count = read(parent->mSockClient, buf, count);
                     //dump(buf, count);
-        			parent->handleRX(buf, count);
+                    parent->handleRX(buf, count);
                 } else {
                     break;
                 }
-    		}
-    	}
+            }
+        }
         state = 0;
-    	if (parent->mCallback)
-    		(*parent->mCallback)(WIFI_STATUS_CONNECT, (u8*)&state, sizeof(state));
+        if (parent->mCallback)
+            (*parent->mCallback)(WIFI_STATUS_CONNECT, (u8*)&state, sizeof(state));
     }
     close(parent->mSockClient);
     parent->mSockClient = -1;
@@ -102,15 +102,15 @@ void *WiFiProtocol::RXThread(void *arg)
 
 WiFiProtocol::WiFiProtocol(int port)
 {
-  	mBoolFinish = FALSE;
-	mState = STATE_IDLE;
+    mBoolFinish = FALSE;
+    mState = STATE_IDLE;
     mSockPort = port;
 }
 
 WiFiProtocol::~WiFiProtocol()
 {
     printf("%s\n", __FUNCTION__);
-	pthread_join(mThreadRx, NULL);
+    pthread_join(mThreadRx, NULL);
 
     if (mSockClient > 0)
         close(mSockClient);
@@ -144,7 +144,7 @@ int WiFiProtocol::startServer(void)
         printf("Listening Error !!\n");
         return err;
     }
-	pthread_create(&mThreadRx, NULL, &RXThread, this);
+    pthread_create(&mThreadRx, NULL, &RXThread, this);
     return 0;
 }
 
@@ -160,62 +160,63 @@ void WiFiProtocol::setCallback(u32 (*callback)(u8 cmd, u8 *data, u8 size))
 
 void WiFiProtocol::sendMSP(u8 sort, u8 bCmd, u8 *data, int len)
 {
-	int  i;
-	int  size = 6;
-	int  pos  = 0;
-	int  wcount;
-	u8	 sig;
-	u8   pl_size;
-	u8   bCheckSum = 0;
-	u8   byteBuf[MAX_BUF_SIZE];
+    int  i;
+    int  size = 6;
+    int  pos  = 0;
+    int  wcount;
+    u8   sig;
+    u8   pl_size;
+    u8   bCheckSum = 0;
+    u8   byteBuf[MAX_BUF_SIZE];
 
-	if (data == NULL)
-		len = 0;
+    if (data == NULL)
+        len = 0;
 
-	if (data != NULL)
-		size = 6 + len;
+    if (data != NULL)
+        size = 6 + len;
 
-	if (sort == SORT_CMD)
-		sig = '<';
-	else if (sort == SORT_RESP_OK)
-		sig = '>';
-	else
-		sig = '!';
+    if (sort == SORT_CMD)
+        sig = '<';
+    else if (sort == SORT_RESP_OK)
+        sig = '>';
+    else
+        sig = '!';
 
-	byteBuf[pos++] = '$';
-	byteBuf[pos++] = 'M';
-	byteBuf[pos++] = sig;
+    byteBuf[pos++] = '$';
+    byteBuf[pos++] = 'M';
+    byteBuf[pos++] = sig;
 
-	pl_size = (u8)(len & 0xFF);
-	byteBuf[pos++] = pl_size;
-	bCheckSum ^= pl_size;
-	byteBuf[pos++] = bCmd;
-	bCheckSum ^= bCmd;
+    pl_size = (u8)(len & 0xFF);
+    byteBuf[pos++] = pl_size;
+    bCheckSum ^= pl_size;
+    byteBuf[pos++] = bCmd;
+    bCheckSum ^= bCmd;
 
-	if (data != NULL) {
-		for (i = 0; i < len; i++) {
-			byteBuf[pos++] = *data;
-			bCheckSum ^= *data++;
-		}
-	}
-	byteBuf[pos++] = bCheckSum;
-	wcount = write(mSockClient, byteBuf, pos);
+    if (data != NULL) {
+        for (i = 0; i < len; i++) {
+            byteBuf[pos++] = *data;
+            bCheckSum ^= *data++;
+        }
+    }
+    byteBuf[pos++] = bCheckSum;
+//  wcount = write(mSockClient, byteBuf, pos);
+    wcount = send(mSockClient, byteBuf, pos, MSG_NOSIGNAL );
 }
 
 void WiFiProtocol::sendResponse(bool ok, u8 cmd, u8 *data, u8 size)
 {
-	sendMSP(ok ? SORT_RESP_OK : SORT_RESP_NO, cmd, data, size);
+    sendMSP(ok ? SORT_RESP_OK : SORT_RESP_NO, cmd, data, size);
 }
 
 void WiFiProtocol::sendCmd(u8 cmd, u8 *data, u8 size)
 {
-	sendMSP(SORT_CMD, cmd, data, size);
+    sendMSP(SORT_CMD, cmd, data, size);
 }
 
 void WiFiProtocol::evalCommand(u8 cmd, u8 *data, u8 size)
 {
-	if (mCallback)
-		(*mCallback)(cmd, data, size);
+    if (mCallback)
+        (*mCallback)(cmd, data, size);
 }
 
 void WiFiProtocol::handleRX(u8 *data, int size)
@@ -224,47 +225,47 @@ void WiFiProtocol::handleRX(u8 *data, int size)
 
     for (int i = 0; i < size; i++) {
         ch = *data++;
-    	switch (mState) {
-    		case STATE_IDLE:
-    			if (ch == '$')
-    				mState = STATE_HEADER_START;
-    			break;
+        switch (mState) {
+            case STATE_IDLE:
+                if (ch == '$')
+                    mState = STATE_HEADER_START;
+                break;
 
-    		case STATE_HEADER_START:
-    			mState = (ch == 'M') ? STATE_HEADER_M : STATE_IDLE;
-    			break;
+            case STATE_HEADER_START:
+                mState = (ch == 'M') ? STATE_HEADER_M : STATE_IDLE;
+                break;
 
-    		case STATE_HEADER_M:
-    			mState = (ch == '<') ? STATE_HEADER_ARROW : STATE_IDLE;
-    			break;
+            case STATE_HEADER_M:
+                mState = (ch == '<') ? STATE_HEADER_ARROW : STATE_IDLE;
+                break;
 
-    		case STATE_HEADER_ARROW:
-    			if (ch > MAX_PACKET_SIZE) { // now we are expecting the payload size
-    				mState = STATE_IDLE;
-    				break;
-    			}
-    			mDataSize = ch;
-    			mCheckSum = ch;
-    			mOffset   = 0;
-    			mState    = STATE_HEADER_SIZE;
-    			break;
+            case STATE_HEADER_ARROW:
+                if (ch > MAX_PACKET_SIZE) { // now we are expecting the payload size
+                    mState = STATE_IDLE;
+                    break;
+                }
+                mDataSize = ch;
+                mCheckSum = ch;
+                mOffset   = 0;
+                mState    = STATE_HEADER_SIZE;
+                break;
 
-    		case STATE_HEADER_SIZE:
-    			mCmd       = ch;
-    			mCheckSum ^= ch;
-    			mState     = STATE_HEADER_CMD;
-    			break;
+            case STATE_HEADER_SIZE:
+                mCmd       = ch;
+                mCheckSum ^= ch;
+                mState     = STATE_HEADER_CMD;
+                break;
 
-    		case STATE_HEADER_CMD:
-    			if (mOffset < mDataSize) {
-    				mCheckSum           ^= ch;
-    				mRxPacket[mOffset++] = ch;
-    			} else {
-    				if (mCheckSum == ch)
-    					evalCommand(mCmd, mRxPacket, mDataSize);
-    				mState = STATE_IDLE;
-    			}
-    			break;
-    	}
+            case STATE_HEADER_CMD:
+                if (mOffset < mDataSize) {
+                    mCheckSum           ^= ch;
+                    mRxPacket[mOffset++] = ch;
+                } else {
+                    if (mCheckSum == ch)
+                        evalCommand(mCmd, mRxPacket, mDataSize);
+                    mState = STATE_IDLE;
+                }
+                break;
+        }
     }
 }

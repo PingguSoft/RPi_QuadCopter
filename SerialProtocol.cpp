@@ -25,7 +25,7 @@
 #include "SerialProtocol.h"
 
 #define MAX_BUF_SIZE  (MAX_PACKET_SIZE + 10)
-#define SORT_CMD	  0
+#define SORT_CMD      0
 #define SORT_RESP_OK  1
 #define SORT_RESP_NO  2
 
@@ -33,28 +33,28 @@ void *SerialProtocol::RXThread(void *arg)
 {
     u8  buf[64];
     int count;
-	fd_set read_fds;
-	SerialProtocol *parent = (SerialProtocol*)arg;
+    fd_set read_fds;
+    SerialProtocol *parent = (SerialProtocol*)arg;
 
-	FD_ZERO(&read_fds);
-	while (!parent->mBoolFinish) {
-		FD_SET(parent->mHandle, &read_fds);
-		select(parent->mHandle + 1, &read_fds, NULL, NULL, NULL);
+    FD_ZERO(&read_fds);
+    while (!parent->mBoolFinish) {
+        FD_SET(parent->mHandle, &read_fds);
+        select(parent->mHandle + 1, &read_fds, NULL, NULL, NULL);
 
-		if (FD_ISSET(parent->mHandle, &read_fds)) {
+        if (FD_ISSET(parent->mHandle, &read_fds)) {
             ioctl(parent->mHandle, FIONREAD, &count);
             count = (count < sizeof(buf)) ? count : sizeof(buf);
-			read(parent->mHandle, buf, count);
-			parent->handleRX(buf, count);
-		}
-	}
+            read(parent->mHandle, buf, count);
+            parent->handleRX(buf, count);
+        }
+    }
 
     return NULL;
 }
 
 SerialProtocol::SerialProtocol(int baud)
 {
-	struct termios ios;
+    struct termios ios;
 
     mHandle = open("/dev/ttyAMA0", O_RDWR | O_NOCTTY | O_NDELAY);
     if (mHandle == -1) {
@@ -76,15 +76,15 @@ SerialProtocol::SerialProtocol(int baud)
     ios.c_cc[VTIME] = 0;
     ios.c_cflag = B115200 | CS8 | CREAD;
     tcsetattr(mHandle, TCSANOW, &ios);
-	mBoolFinish = FALSE;
-	mState = STATE_IDLE;
-	pthread_create(&mThreadRx, NULL, &RXThread, this);
+    mBoolFinish = FALSE;
+    mState = STATE_IDLE;
+    pthread_create(&mThreadRx, NULL, &RXThread, this);
 }
 
 SerialProtocol::~SerialProtocol()
 {
     printf("%s\n", __FUNCTION__);
-	pthread_join(mThreadRx, NULL);
+    pthread_join(mThreadRx, NULL);
     close(mHandle);
 }
 
@@ -100,62 +100,62 @@ void SerialProtocol::setCallback(u32 (*callback)(bool ok, u8 cmd, u8 *data, u8 s
 
 void SerialProtocol::sendMSP(u8 sort, u8 bCmd, u8 *data, int len)
 {
-	int  i;
-	int  size = 6;
-	int  pos  = 0;
-	int  wcount;
-	u8	 sig;
-	u8   pl_size;
-	u8   bCheckSum = 0;
-	u8   byteBuf[MAX_BUF_SIZE];
+    int  i;
+    int  size = 6;
+    int  pos  = 0;
+    int  wcount;
+    u8   sig;
+    u8   pl_size;
+    u8   bCheckSum = 0;
+    u8   byteBuf[MAX_BUF_SIZE];
 
-	if (data == NULL)
-		len = 0;
+    if (data == NULL)
+        len = 0;
 
-	if (data != NULL)
-		size = 6 + len;
+    if (data != NULL)
+        size = 6 + len;
 
-	if (sort == SORT_CMD)
-		sig = '<';
-	else if (sort == SORT_RESP_OK)
-		sig = '>';
-	else
-		sig = '!';
+    if (sort == SORT_CMD)
+        sig = '<';
+    else if (sort == SORT_RESP_OK)
+        sig = '>';
+    else
+        sig = '!';
 
-	byteBuf[pos++] = '$';
-	byteBuf[pos++] = 'M';
-	byteBuf[pos++] = sig;
+    byteBuf[pos++] = '$';
+    byteBuf[pos++] = 'M';
+    byteBuf[pos++] = sig;
 
-	pl_size = (u8)(len & 0xFF);
-	byteBuf[pos++] = pl_size;
-	bCheckSum ^= pl_size;
-	byteBuf[pos++] = bCmd;
-	bCheckSum ^= bCmd;
+    pl_size = (u8)(len & 0xFF);
+    byteBuf[pos++] = pl_size;
+    bCheckSum ^= pl_size;
+    byteBuf[pos++] = bCmd;
+    bCheckSum ^= bCmd;
 
-	if (data != NULL) {
-		for (i = 0; i < len; i++) {
-			byteBuf[pos++] = *data;
-			bCheckSum ^= *data++;
-		}
-	}
-	byteBuf[pos++] = bCheckSum;
-	wcount = write(mHandle, byteBuf, pos);
+    if (data != NULL) {
+        for (i = 0; i < len; i++) {
+            byteBuf[pos++] = *data;
+            bCheckSum ^= *data++;
+        }
+    }
+    byteBuf[pos++] = bCheckSum;
+    wcount = write(mHandle, byteBuf, pos);
 }
 
 void SerialProtocol::sendResponse(bool ok, u8 cmd, u8 *data, u8 size)
 {
-	sendMSP(ok ? SORT_RESP_OK : SORT_RESP_NO, cmd, data, size);
+    sendMSP(ok ? SORT_RESP_OK : SORT_RESP_NO, cmd, data, size);
 }
 
 void SerialProtocol::sendCmd(u8 cmd, u8 *data, u8 size)
 {
-	sendMSP(SORT_CMD, cmd, data, size);
+    sendMSP(SORT_CMD, cmd, data, size);
 }
 
 void SerialProtocol::evalCommand(bool ok, u8 cmd, u8 *data, u8 size)
 {
-	if (mCallback)
-		(*mCallback)(ok, cmd, data, size);
+    if (mCallback)
+        (*mCallback)(ok, cmd, data, size);
 }
 
 void SerialProtocol::handleRX(u8 *data, int size)
@@ -164,17 +164,17 @@ void SerialProtocol::handleRX(u8 *data, int size)
 
     for (int i = 0; i < size; i++) {
         ch = *data++;
-    	switch (mState) {
-    		case STATE_IDLE:
-    			if (ch == '$')
-    				mState = STATE_HEADER_START;
-    			break;
+        switch (mState) {
+            case STATE_IDLE:
+                if (ch == '$')
+                    mState = STATE_HEADER_START;
+                break;
 
-    		case STATE_HEADER_START:
-    			mState = (ch == 'M') ? STATE_HEADER_M : STATE_IDLE;
-    			break;
+            case STATE_HEADER_START:
+                mState = (ch == 'M') ? STATE_HEADER_M : STATE_IDLE;
+                break;
 
-    		case STATE_HEADER_M:
+            case STATE_HEADER_M:
                 if (ch == '>') {
                     mState = STATE_HEADER_ARROW;
                     mRespOK = TRUE;
@@ -185,36 +185,36 @@ void SerialProtocol::handleRX(u8 *data, int size)
                 }
                 else
                     mState = STATE_IDLE;
-    			break;
+                break;
 
             case STATE_HEADER_ERR:
-    		case STATE_HEADER_ARROW:
-    			if (ch > MAX_PACKET_SIZE) { // now we are expecting the payload size
-    				mState = STATE_IDLE;
-    				break;
-    			}
-    			mDataSize = ch;
-    			mCheckSum = ch;
-    			mOffset   = 0;
-    			mState    = STATE_HEADER_SIZE;
-    			break;
+            case STATE_HEADER_ARROW:
+                if (ch > MAX_PACKET_SIZE) { // now we are expecting the payload size
+                    mState = STATE_IDLE;
+                    break;
+                }
+                mDataSize = ch;
+                mCheckSum = ch;
+                mOffset   = 0;
+                mState    = STATE_HEADER_SIZE;
+                break;
 
-    		case STATE_HEADER_SIZE:
-    			mCmd       = ch;
-    			mCheckSum ^= ch;
-    			mState     = STATE_HEADER_CMD;
-    			break;
+            case STATE_HEADER_SIZE:
+                mCmd       = ch;
+                mCheckSum ^= ch;
+                mState     = STATE_HEADER_CMD;
+                break;
 
-    		case STATE_HEADER_CMD:
-    			if (mOffset < mDataSize) {
-    				mCheckSum           ^= ch;
-    				mRxPacket[mOffset++] = ch;
-    			} else {
-    				if (mCheckSum == ch)
-    					evalCommand(mRespOK, mCmd, mRxPacket, mDataSize);
-    				mState = STATE_IDLE;
-    			}
-    			break;
-    	}
+            case STATE_HEADER_CMD:
+                if (mOffset < mDataSize) {
+                    mCheckSum           ^= ch;
+                    mRxPacket[mOffset++] = ch;
+                } else {
+                    if (mCheckSum == ch)
+                        evalCommand(mRespOK, mCmd, mRxPacket, mDataSize);
+                    mState = STATE_IDLE;
+                }
+                break;
+        }
     }
 }
