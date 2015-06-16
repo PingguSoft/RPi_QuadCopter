@@ -91,10 +91,12 @@ void *WiFiProtocol::RXThread(void *arg)
             }
         }
         state = 0;
+        close(parent->mSockClient);
+
         if (parent->mCallback)
             (*parent->mCallback)(WIFI_STATUS_CONNECT, (u8*)&state, sizeof(state));
     }
-    close(parent->mSockClient);
+
     parent->mSockClient = -1;
 
     return NULL;
@@ -200,7 +202,7 @@ void WiFiProtocol::sendMSP(u8 sort, u8 bCmd, u8 *data, int len)
     }
     byteBuf[pos++] = bCheckSum;
 //  wcount = write(mSockClient, byteBuf, pos);
-    wcount = send(mSockClient, byteBuf, pos, MSG_NOSIGNAL );
+    wcount = send(mSockClient, byteBuf, pos, MSG_NOSIGNAL);
 }
 
 void WiFiProtocol::sendResponse(bool ok, u8 cmd, u8 *data, u8 size)

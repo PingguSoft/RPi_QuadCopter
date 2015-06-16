@@ -172,7 +172,8 @@ static char *szUV4L =
     "--imgfx=%s";
 
 static char *szRTSP =
-    (char*)"su - pi -c '/home/pi/sw/QuadCopter/h264_v4l2_rtspserver /dev/video0 -P %d -W %d -H %d -F %d &'";
+    (char*)"su - pi -c '/home/pi/sw/QuadCopter/h264_v4l2_rtspserver /dev/video0 -P %d "
+    "-W %d -H %d -F %d &'";
 
 
 void killVideo(void)
