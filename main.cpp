@@ -10,6 +10,9 @@
 
 #define MAX(a, b) ( (a) > (b) ? (a) : (b))
 
+const int VIDEO_RTSP  = 0;
+const int VIDEO_MJPEG = 1;
+
 const int PERIOD_CH0 = 4000;
 const int GPIO_R = 17;
 const int GPIO_G = 27;
@@ -103,13 +106,13 @@ u32 cbSerialRX(bool ok, u8 cmd, u8 * data, u8 size)
         mWiFi->sendResponse(ok, cmd, data, size);
 }
 
-static char *szH264[] = {
+const static char *szH264[] = {
     (char*)"baseline",
     (char*)"high",
     (char*)"main"
 };
 
-static char *szEXP[] = {
+const static char *szEXP[] = {
     (char*)"auto",
     (char*)"antishake",
     (char*)"backlight",
@@ -124,7 +127,7 @@ static char *szEXP[] = {
     (char*)"verylong"
 };
 
-static char *szAWB[] = {
+const static char *szAWB[] = {
     (char*)"auto",
     (char*)"cloudy",
     (char*)"flash",
@@ -137,7 +140,7 @@ static char *szAWB[] = {
     (char*)"tungsten",
 };
 
-static char *szFX[] = {
+const static char *szFX[] = {
     (char*)"none",
     (char*)"blur",
     (char*)"cartoon",
@@ -160,50 +163,89 @@ static char *szFX[] = {
     (char*)"watercolour"
 };
 
-static char *szCmdsKill[] = {
+const static char *szCmdsKill[] = {
     (char*)"pkill -2 -f h264_v4l2_rtspserver",
 //    (char*)"fuser -k -n tcp 8554",
-    (char*)"pkill uv4l"
+    (char*)"pkill uv4l",
+	(char*)"pkill -2 -f mjpg_streamer"
 };
-
-static char *szUV4L =
-    (char*)"uv4l --driver raspicam --auto-video_nr --sched-rr --encoding=h264 --nopreview "
-    "--vflip --hflip --profile=%s --width=%d --height=%d --framerate=%d --bitrate=%d --awb=%s --exposure=%s "
-    "--imgfx=%s";
-
-static char *szRTSP =
-    (char*)"su - pi -c '/home/pi/sw/QuadCopter/h264_v4l2_rtspserver /dev/video0 -P %d "
-    "-W %d -H %d -F %d &'";
-
 
 void killVideo(void)
 {
     for (int i = 0; i < sizeof(szCmdsKill) / sizeof(char*); i++) {
         printf("CMD:%s\n", szCmdsKill[i]);
         system(szCmdsKill[i]);
-        usleep(1000000);
+        usleep(500000);
     }
 }
 
-int startVideo(int pro, int width, int height, int bitrate, int fps, int awb, int exp, int fx)
+
+const static char *szUV4L =
+    (char*)"uv4l --auto-video_nr --sched-rr --driver raspicam --encoding=h264 --nopreview "
+    "--vflip --hflip --profile=%s --width=%d --height=%d --framerate=%d --bitrate=%d --awb=%s --exposure=%s "
+    "--imgfx=%s --custom-sensor-config=%d";
+
+const static char *szRTSP =
+    (char*)"su - pi -c '/home/pi/sw/QuadCopter/h264_v4l2_rtspserver /dev/video0 -P %d "
+    "-W %d -H %d -F %d &'";
+
+	
+//uv4l --auto-video_nr --sched-rr --driver raspicam --encoding=mjpeg --width=640 --height=480 --hflip --vflip --framerate=30 --nopreview
+//./mjpg_streamer -o "output_http.so -w ./www" -i "input_raspicam.so -x 640 -y 480 -fps 25 -vf -hf -quality 70"
+//./mjpg_streamer -o "./output_http.so -w ./www" -i "./input_dev.so -dev /dev/video0"
+
+
+const static char *szMJPGPath = "/home/pi/sw/QuadCopter/mjpg-streamer-experimental";
+const static char *szMJPEG = 
+	(char*)"su - pi -c '%s/mjpg_streamer "
+	"-o \"%s/output_http.so -w %s/www -p %d\" -i \"%s/input_raspicam.so -x %d -y %d -fps %d -vf -hf -quality 70 "
+	"-awb %s -ex %s -ifx %s\" &'";
+	
+int startVideo(int mode, int pro, int width, int height, int bitrate, int fps, int awb, int exp, int fx)
 {
     int  ret;
-    char szBuf[256];
+    char szBuf[512];
+	int  sensor_config = 0;
 
-    sprintf(szBuf, szUV4L, szH264[pro], width, height, fps, bitrate,
-        szAWB[awb], szEXP[exp], szFX[fx]);
-    ret = system(szBuf);
-    printf("CMD:%s\n", szBuf);
+/*
+	0 for normal mode,
+	1 for 1080P30 cropped 1-30fps mode,
+	2 for 5MPix 1-15fps mode,
+	3 for 5MPix 0.1666-1fps mode,
+	4 for 2x2 binned 1296x972 1-42fps mode,
+	5 for 2x2 binned 1296x730 1-49fps mode,
+	6 for VGA 30-60fps mode,
+	7 for VGA 60-90fps mode	
+*/
 
-    int port = 7771 + (mRTSPPort++ % 9);
-    sprintf(szBuf, szRTSP, port, width, height, fps);
-    ret = system(szBuf);
-    printf("CMD:%s\n", szBuf);
+    int port = 7790 + (mRTSPPort++ % 9);
+	
+	if (mode == VIDEO_RTSP) {
+		if (height < 1080)
+			sensor_config = 5;
+		else if (height < 720)
+			sensor_config = 7;
+
+		sprintf(szBuf, szUV4L, szH264[pro], width, height, fps, bitrate,
+			szAWB[awb], szEXP[exp], szFX[fx], sensor_config);
+		ret = system(szBuf);
+		printf("CMD RTSP:%s\n", szBuf);
+		
+		sprintf(szBuf, szRTSP, port, width, height, fps);
+		ret = system(szBuf);
+		printf("CMD RTSP:%s\n", szBuf);
+	} else {
+		sprintf(szBuf, szMJPEG, szMJPGPath, szMJPGPath, szMJPGPath,
+				port, szMJPGPath, width, height, fps, szAWB[awb], szEXP[exp], szFX[fx]);
+		ret = system(szBuf);
+		printf("CMD:%s\n", szBuf);
+	}
 
     return port;
 }
 
 typedef struct __attribute__ ((__packed__)) {
+	u8  vidmode;
     u16 width;
     u16 height;
     u32 bitrate;
@@ -241,7 +283,7 @@ u32 cbWiFiRX(u8 cmd, u8 *data, u8 size)
         case WiFiProtocol::WIFI_CMD_START_VIDEO: {
             ENC_T *pEnc = (ENC_T *)data;
 
-            int port = startVideo(pEnc->prof, pEnc->width, pEnc->height,
+            int port = startVideo(pEnc->vidmode, pEnc->prof, pEnc->width, pEnc->height,
                 pEnc->bitrate, pEnc->fps, pEnc->awb, pEnc->exp, pEnc->fx);
             if (mWiFi)
                 mWiFi->sendResponse(TRUE, cmd, (u8*)&port, sizeof(port));
