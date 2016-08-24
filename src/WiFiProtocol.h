@@ -25,18 +25,27 @@ class WiFiProtocol
 
 public:
     enum {
-        WIFI_STATUS_CONNECT  = 0,
+        WIFI_CODE_STATUS    = 0,
+        WIFI_CODE_REDIRECT  = 1,
+        WIFI_CODE_CMD       = 2,
+    };
+
+    enum {
         WIFI_CMD_START_VIDEO = 10,
         WIFI_CMD_STOP_VIDEO  = 11,
     };
-    WiFiProtocol(int port);
+    
+    WiFiProtocol(int port, bool redirect=TRUE);
     ~WiFiProtocol();
 
     int  startServer(void);
     void stopServer(void);
     void sendCmd(u8 cmd, u8 *data, u8 size);
+    int  sendPacket(u8 *data, int len);
     void sendResponse(bool ok, u8 cmd, u8 *data, u8 size);
-    void setCallback(u32 (*callback)(u8 cmd, u8 *data, u8 size));
+    void setCallback(u32 (*callback)(u8 code, u8 cmd, u8 *data, u8 size));
+    bool isRedirect(void)               { return mBoolRedirect; }
+    void enableRedirect(bool redirect)  { mBoolRedirect = redirect; }
 
 private:
     typedef enum
@@ -57,7 +66,8 @@ private:
 
     // variables
     pthread_t mThreadRx;
-    bool mBoolFinish;
+    volatile bool mBoolRedirect;
+    volatile bool mBoolFinish;
     int  mSockServer;
     int  mSockClient;
     int  mSockPort;
@@ -69,7 +79,7 @@ private:
     u8   mDataSize;
     u8   mCheckSum;
     u8   mCmd;
-    u32  (*mCallback)(u8 cmd, u8 *data, u8 size);
+    u32  (*mCallback)(u8 code, u8 cmd, u8 *data, u8 size);
 };
 
 #endif

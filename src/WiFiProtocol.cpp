@@ -33,7 +33,7 @@
 #define SORT_RESP_OK  1
 #define SORT_RESP_NO  2
 
-void dump(u8 *data, int len)
+static void dump(u8 *data, int len)
 {
     int i;
 
@@ -48,13 +48,43 @@ void dump(u8 *data, int len)
 
 void *WiFiProtocol::RXThread(void *arg)
 {
-    u8     buf[64];
+    u8     buf[128];
     int    count;
     int    clilen;
     int    state;
     fd_set read_fds;
     struct sockaddr_in cli_addr;
     WiFiProtocol *parent = (WiFiProtocol*)arg;
+
+    struct sockaddr_in serv_addr;
+    
+    parent->mSockServer = socket(AF_INET, SOCK_STREAM, 0);
+    if (parent->mSockServer < 0) {
+        printf("Socket creation error !!\n");
+        return NULL;
+    }
+    
+    int enable = 1;
+    if (setsockopt(parent->mSockServer, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) < 0) {
+        printf("setsockopt(SO_REUSEADDR) failed"); 
+        return NULL;
+    }
+
+    bzero((char *) &serv_addr, sizeof(serv_addr));
+    serv_addr.sin_family      = AF_INET;
+    serv_addr.sin_addr.s_addr = INADDR_ANY;
+    serv_addr.sin_port        = htons(parent->mSockPort);
+    int err = bind(parent->mSockServer, (struct sockaddr *) &serv_addr, sizeof(serv_addr));
+    if (err < 0) {
+        printf("Binding Error !! : %d\n", err);
+        return NULL;
+    }
+
+    err = listen(parent->mSockServer, 5);
+    if (err < 0) {
+        printf("Listening Error !!\n");
+        return NULL;
+    }    
 
     FD_ZERO(&read_fds);
 
@@ -66,7 +96,7 @@ void *WiFiProtocol::RXThread(void *arg)
         } else {
             state = 1;
             if (parent->mCallback)
-                (*parent->mCallback)(WIFI_STATUS_CONNECT, (u8*)&state, sizeof(state));
+                (*parent->mCallback)(WIFI_CODE_STATUS, 0, (u8*)&state, sizeof(state));
         }
 
         printf("A connection has been accepted from %s port:%d\n",
@@ -84,7 +114,11 @@ void *WiFiProtocol::RXThread(void *arg)
                     //printf("socket read : %d\n", count);
                     count = read(parent->mSockClient, buf, count);
                     //dump(buf, count);
-                    parent->handleRX(buf, count);
+                    if (parent->mBoolRedirect && parent->mCallback) {
+                        (*parent->mCallback)(WIFI_CODE_REDIRECT, 0, buf, count);
+                    } else {
+                        parent->handleRX(buf, count);
+                    }
                 } else {
                     break;
                 }
@@ -94,58 +128,33 @@ void *WiFiProtocol::RXThread(void *arg)
         close(parent->mSockClient);
 
         if (parent->mCallback)
-            (*parent->mCallback)(WIFI_STATUS_CONNECT, (u8*)&state, sizeof(state));
+            (*parent->mCallback)(WIFI_CODE_STATUS, 0, (u8*)&state, sizeof(state));
     }
 
-    parent->mSockClient = -1;
+    parent->mSockClient = 0;
+    
+    close(parent->mSockServer);
+    parent->mSockServer = 0;
 
     return NULL;
 }
 
-WiFiProtocol::WiFiProtocol(int port)
+WiFiProtocol::WiFiProtocol(int port, bool redirect)
 {
     mBoolFinish = FALSE;
     mState = STATE_IDLE;
     mSockPort = port;
+    mBoolRedirect = redirect;
 }
 
 WiFiProtocol::~WiFiProtocol()
 {
-    printf("%s\n", __FUNCTION__);
-    pthread_join(mThreadRx, NULL);
-
-    if (mSockClient > 0)
-        close(mSockClient);
-    if (mSockServer > 0)
-        close(mSockServer);
+//    printf("%s\n", __FUNCTION__);
+//    stopServer();
 }
 
 int WiFiProtocol::startServer(void)
 {
-    int    err = 0;
-    struct sockaddr_in serv_addr;
-
-    mSockServer = socket(AF_INET, SOCK_STREAM, 0);
-    if (mSockServer < 0) {
-        printf("Socket creation error !!\n");
-        return mSockServer;
-    }
-
-    bzero((char *) &serv_addr, sizeof(serv_addr));
-    serv_addr.sin_family      = AF_INET;
-    serv_addr.sin_addr.s_addr = INADDR_ANY;
-    serv_addr.sin_port        = htons(mSockPort);
-    err = bind(mSockServer, (struct sockaddr *) &serv_addr, sizeof(serv_addr));
-    if (err < 0) {
-        printf("Binding Error !!\n");
-        return err;
-    }
-
-    err = listen(mSockServer, 5);
-    if (err < 0) {
-        printf("Listening Error !!\n");
-        return err;
-    }
     pthread_create(&mThreadRx, NULL, &RXThread, this);
     return 0;
 }
@@ -153,9 +162,20 @@ int WiFiProtocol::startServer(void)
 void WiFiProtocol::stopServer(void)
 {
     mBoolFinish = true;
+    if (mSockClient > 0) {
+        close(mSockClient);
+        mSockClient = 0;
+    }
+    if (mSockServer > 0) {
+        close(mSockServer);    
+        mSockServer = 0;
+    }
+    pthread_cancel(mThreadRx);
+    pthread_join(mThreadRx, NULL);
+    printf("%s finished\n", __PRETTY_FUNCTION__);
 }
 
-void WiFiProtocol::setCallback(u32 (*callback)(u8 cmd, u8 *data, u8 size))
+void WiFiProtocol::setCallback(u32 (*callback)(u8 code, u8 cmd, u8 *data, u8 size))
 {
     mCallback = callback;
 }
@@ -205,6 +225,11 @@ void WiFiProtocol::sendMSP(u8 sort, u8 bCmd, u8 *data, int len)
     wcount = send(mSockClient, byteBuf, pos, MSG_NOSIGNAL);
 }
 
+int WiFiProtocol::sendPacket(u8 *data, int len)
+{
+    return send(mSockClient, data, len, MSG_NOSIGNAL);
+}
+
 void WiFiProtocol::sendResponse(bool ok, u8 cmd, u8 *data, u8 size)
 {
     sendMSP(ok ? SORT_RESP_OK : SORT_RESP_NO, cmd, data, size);
@@ -218,7 +243,7 @@ void WiFiProtocol::sendCmd(u8 cmd, u8 *data, u8 size)
 void WiFiProtocol::evalCommand(u8 cmd, u8 *data, u8 size)
 {
     if (mCallback)
-        (*mCallback)(cmd, data, size);
+        (*mCallback)(WIFI_CODE_CMD, cmd, data, size);
 }
 
 void WiFiProtocol::handleRX(u8 *data, int size)

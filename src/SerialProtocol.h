@@ -76,13 +76,16 @@ class SerialProtocol
 {
 
 public:
-    SerialProtocol(int baud);
+    SerialProtocol(int baud, bool redirect=TRUE);
     ~SerialProtocol();
 
     void stopServer(void);
     void sendCmd(u8 cmd, u8 *data, u8 size);
+    int  sendPacket(u8 *data, int len);
     void sendResponse(bool ok, u8 cmd, u8 *data, u8 size);
     void setCallback(u32 (*callback)(bool ok, u8 cmd, u8 *data, u8 size));
+    bool isRedirect(void)               { return mBoolRedirect; }
+    void enableRedirect(bool redirect)  { mBoolRedirect = redirect; }
 
 private:
     typedef enum
@@ -104,11 +107,12 @@ private:
 
     // variables
     pthread_t mThreadRx;
-    bool mBoolFinish;
+    volatile bool mBoolRedirect;
+    volatile bool mBoolFinish;
     int  mHandle;
 
     u8   mRxPacket[MAX_PACKET_SIZE];
-
+    
     u8   mState;
     u8   mOffset;
     u8   mDataSize;

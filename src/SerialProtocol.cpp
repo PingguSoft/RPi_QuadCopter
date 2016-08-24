@@ -29,9 +29,23 @@
 #define SORT_RESP_OK  1
 #define SORT_RESP_NO  2
 
+
+static void dump(u8 *data, int len)
+{
+    int i;
+
+    for (i = 0; i < len ; i++) {
+        if (i != 0 && (i % 16) == 0)
+            printf("\n");
+        printf("%02X (%c) ", *data, *data);
+        data++;
+    }
+    printf("\n\n");
+}
+
 void *SerialProtocol::RXThread(void *arg)
 {
-    u8  buf[64];
+    u8  buf[128];
     int count;
     fd_set read_fds;
     SerialProtocol *parent = (SerialProtocol*)arg;
@@ -45,14 +59,20 @@ void *SerialProtocol::RXThread(void *arg)
             ioctl(parent->mHandle, FIONREAD, &count);
             count = (count < sizeof(buf)) ? count : sizeof(buf);
             read(parent->mHandle, buf, count);
-            parent->handleRX(buf, count);
+            
+            //dump(buf, count);
+            if (parent->mBoolRedirect && parent->mCallback) {
+                (*parent->mCallback)(TRUE, 0xff, buf, count);
+            } else {
+                parent->handleRX(buf, count);
+            }
         }
     }
 
     return NULL;
 }
 
-SerialProtocol::SerialProtocol(int baud)
+SerialProtocol::SerialProtocol(int baud, bool redirect)
 {
     struct termios ios;
 
@@ -76,6 +96,7 @@ SerialProtocol::SerialProtocol(int baud)
     ios.c_cc[VTIME] = 0;
     ios.c_cflag = B115200 | CS8 | CREAD;
     tcsetattr(mHandle, TCSANOW, &ios);
+    mBoolRedirect = redirect;
     mBoolFinish = FALSE;
     mState = STATE_IDLE;
     pthread_create(&mThreadRx, NULL, &RXThread, this);
@@ -83,14 +104,21 @@ SerialProtocol::SerialProtocol(int baud)
 
 SerialProtocol::~SerialProtocol()
 {
-    printf("%s\n", __FUNCTION__);
-    pthread_join(mThreadRx, NULL);
-    close(mHandle);
+//    printf("%s\n", __FUNCTION__);
+//    stopServer();
 }
 
 void SerialProtocol::stopServer(void)
 {
     mBoolFinish = true;
+    if (mHandle > 0) {
+        close(mHandle);
+        mHandle = 0;
+    }
+
+    pthread_cancel(mThreadRx);
+    pthread_join(mThreadRx, NULL);
+    printf("%s finished\n", __PRETTY_FUNCTION__);
 }
 
 void SerialProtocol::setCallback(u32 (*callback)(bool ok, u8 cmd, u8 *data, u8 size))
@@ -140,6 +168,11 @@ void SerialProtocol::sendMSP(u8 sort, u8 bCmd, u8 *data, int len)
     }
     byteBuf[pos++] = bCheckSum;
     wcount = write(mHandle, byteBuf, pos);
+}
+
+int SerialProtocol::sendPacket(u8 *data, int len)
+{
+    return write(mHandle, data, len);
 }
 
 void SerialProtocol::sendResponse(bool ok, u8 cmd, u8 *data, u8 size)
